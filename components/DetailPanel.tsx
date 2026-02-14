@@ -248,7 +248,9 @@ const DetailPanel: React.FC<DetailPanelProps> = ({ entity, lang, onClose, isDevM
       if (!chatInput.trim() || !entity) return;
       
       const userMsg = chatInput;
-      setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+      // Optimistic Update
+      const newMessages = [...chatMessages, { role: 'user' as const, text: userMsg }];
+      setChatMessages(newMessages);
       setChatInput('');
       setIsChatLoading(true);
 
@@ -263,22 +265,27 @@ const DetailPanel: React.FC<DetailPanelProps> = ({ entity, lang, onClose, isDevM
             Keep answers concise and relevant to the historical entity.
           `;
           
-          const model = ai.models.getGenerativeModel({ 
-            model: 'gemini-3-flash-preview',
-            systemInstruction: context
-          });
-          
-          const chat = model.startChat({
-              history: chatMessages.map(m => ({
+          // Use new SDK Chat API
+          const chat = ai.chats.create({
+              model: 'gemini-3-flash-preview',
+              config: {
+                systemInstruction: context,
+              },
+              history: newMessages.map(m => ({
                   role: m.role,
                   parts: [{ text: m.text }]
               }))
           });
 
-          const result = await chat.sendMessage(userMsg);
-          const responseText = result.response.text();
+          // In new SDK, we send the last message
+          const result = await chat.sendMessage({ message: userMsg });
+          const responseText = result.text;
           
-          setChatMessages(prev => [...prev, { role: 'model', text: responseText }]);
+          if (responseText) {
+              setChatMessages(prev => [...prev, { role: 'model', text: responseText }]);
+          } else {
+             throw new Error("Empty response");
+          }
 
       } catch (error) {
           console.error("Chat error:", error);
